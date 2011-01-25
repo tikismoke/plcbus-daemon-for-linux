@@ -4,14 +4,23 @@
 #
 # Created by Wayne Thomas
 #
-# Based upon hub_plcbus.pl (written by Jfn of domoticaforum) with some code
-# borrowed from Ron Frazier (http://www.ronfrazier.net).  Listens on the 
-# designated TCP port for correctly formatted commands and passes them to the 
+# History
+#
+# 200xxxxx Initial version by Wayne Thomas, based upon hub_plcbus.pl (written
+#          by Jfn of  domoticaforum) with some code borrowed from Ron Frazier
+#          (http://www.ronfrazier.net).
+#
+# 20110125 Support added for PLCBUS-1141 PLUS (+) computer interface by Maurice
+#          de Bijl (http://www.ruwebit.net) by checking received frames
+#          against checksum instead of ETX byte. Based up on knowledge from
+#          http://www.domoticaforum.eu/viewtopic.php?f=38&t=5735
+#
+#
+# Listens on the designated TCP port for correctly formatted commands and passes them to the 
 # PLCBUS adaptor then returns the response.
 #
-#       Feel free to do anything you want with this, as long as you
-#       include the above attribution.
-#
+# Feel free to do anything you want with this, as long as you
+# include the above attribution.
 #
 # Accepts commands in the following format:
 #	homeunit,command,[hexvalue1],[hexvalue2]
@@ -33,7 +42,8 @@ use Time::HiRes qw(sleep);
 use IO::Socket::INET;
 use SerialLibs::IOSelectBuffered;
 
-my $serdev = '/dev/plcbus';	# Serial Port device (using custom udev rule)
+#my $serdev = '/dev/plcbus';	# Serial Port device (using custom udev rule)
+my $serdev = '/dev/ttyS0';
 my $serport;			# handle for the serial port
 my $listenport = 5151;
 
@@ -130,7 +140,7 @@ sub plcbus_tx_command
 		($plcbus_command == 0x11) || ($plcbus_command == 0x1a) || ($plcbus_command == 0x1b));
 	$plcbus_data2 = hex ($params_data[3]) if (($plcbus_command == 0x0c) || ($plcbus_command == 0x0d) ||
 		($plcbus_command == 0x10) || ($plcbus_command == 0x11) || ($plcbus_command == 0x1a) || ($plcbus_command == 0x1b));
-#	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
+	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
 	$plcbus_frame = pack ('C*', 0x02, 0x05, 0xff, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
@@ -138,7 +148,7 @@ sub plcbus_tx_command
 	{
 		my ($bytes, $read) = $serport->read(1);
 		last if $bytes == 0;
-#		print "$bytes byte --> $read <-- cleared from buffer\n";
+		print "$bytes byte --> $read <-- cleared from buffer\n";
 	}
 
 	foreach (1..3)
@@ -172,6 +182,7 @@ sub plcbus_check_status
 		{
 			my $plcbus_frame=$serport->read(9);
 			my @params_data = unpack ('C*', $plcbus_frame);
+                        
 			if (plcbus_rx_valid_frame (@params_data))
 			{
 				if (plcbus_rx_status(@params_data))	# Did we receive a valid frame and does it contain a status message
@@ -201,16 +212,21 @@ sub plcbus_rx_valid_frame
 	# Did we receive a valid 9 byte PLCBUS frame?
 	if (scalar @data == 9)
 	{
-#		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X\n", $data[0], $data[1], $data[2],
-#			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8];
+		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X", $data[0], $data[1], $data[2],
+			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8];
 		# Does it have a payload of six bytes and start with STX and ends with ETX?
-		if (($data[1] == 6) && ($data[0] == 0x02) && ($data[8] == 0x03))
+		if ((($data[1] == 6) && ($data[0] == 0x02) && ($data[8] == 0x03))
+		
+		# Support for the PLCBUS-1141 PLUS (+) computer interface
+		|| (($data[1] == 6) && ((($data[0] + $data[1] + $data[2] + $data[3] + $data[4] + $data[5] + $data[6] + $data[7] + $data[8]) % 0x100) == 0x00)))
 		{
 		# Yes it does, we have a valid frame!
+		        printf "\n";
 			return 1;
 		} else
 		{
 			# Bummer, better luck next time
+			printf " - not a valid frame\n";
 			return 0;
 		}
 	}
