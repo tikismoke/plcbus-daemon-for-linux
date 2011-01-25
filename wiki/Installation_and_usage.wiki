@@ -1,0 +1,36 @@
+#summary One-sentence summary of this page.
+
+Please note, the biggest part of this Wiki page is copy-pasted from http://www.domoticaforum.eu/viewtopic.php?t=1181
+
+= Requirements =
+  # Installed Linux distributions (other platform may also be supported, or not, your mileage may vary).
+  # The plcbus deamon server, it will be hosted on Google Code in the near future, but for now it can be downloaded [http://dl.dropbox.com/u/11711990/Serial/plcbus.pl here]
+  # Required Module originally written by Ron Frazer: [http://dl.dropbox.com/u/11711990/Serial/IOSelectBuffered.pm IOSelectBurrered.pm]
+
+= Installation =
+  # Save plcbus.pl into an executable directory (I use /usr/local/bin) and make it executable.
+  # Modify $serdev on line 11 of plcbus.pl to match your system (i.e. /dev/ttyUSB0). I use a custom udev rule to ensure my device is always /dev/plcbus.
+  # Save IOSelectBurrered.pm into a directory called SerialLibs (note the use of uppercase letters) in one of the standard perl module locations (I use /etc/perl/SerialLibs).
+  # Run the server in the background:
+  {{{plcbus.pl &}}}
+
+= Usage =
+  * Send commands from any network connect pc using netcat in the following format:
+
+  {{{echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 localhost 5151}}}
+
+  where:
+  * _a1_ can be replaced with the appropriate plcbus device
+  *_preset_dim can be replaced with the appropriate command or query (see lines 18 to 46 of plcbus.pl for a complete list)
+  * _64_ can be replaced with an appropriate value (in hex) for the command (ignored if not relevant)
+  * _5_ can be replaced with an appropriate value (in hex) for the command (ignored if not relevant)
+  * _localhost_ can be replaced by the appropriate hostname or ip address that the server resides upon
+  * _-i 1_ is only required if you are sending commands from a remote computer and don't seem to be getting a response
+
+  Note that for some Linux installation, 'nc' has to replaced with 'netcat'
+
+  The example code above turns device a1 (a dimmable light module) on to full brightness (hex 64 = 100) over a period of 5 seconds. The response given is:
+
+  {{{PRESET_DIM,100,5}}}
+
+  ...which tells you that the dim level is 100% and the execution time was 5 seconds.
