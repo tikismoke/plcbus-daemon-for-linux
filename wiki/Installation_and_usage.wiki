@@ -3,7 +3,7 @@ Please note, the biggest part of this Wiki page is copy-pasted from http://www.d
 = Requirements =
   # Installed Linux distributions (other platform may also be supported, or not, your mileage may vary).
   # The plcbus deamon server, it will be hosted on Google Code in the near future, but for now it can be downloaded [http://dl.dropbox.com/u/11711990/Serial/plcbus.pl here]
-  # Required Module originally written by Ron Frazer: [http://code.google.com/p/plcbus-daemon-for-linux/downloads/list IOSelectBurrered.pm] or [http://dl.dropbox.com/u/11711990/Serial/IOSelectBuffered.pm mirror]
+  # Required Module originally written by Ron Frazer: [http://code.google.com/p/plcbus-daemon-for-linux/downloads/detail?name=IOSelectBuffered.pm#makechanges IOSelectBurrered.pm] or [http://dl.dropbox.com/u/11711990/Serial/IOSelectBuffered.pm mirror]
 
 = Installation =
   # Save plcbus.pl into an executable directory (I use /usr/local/bin) and make it executable.
