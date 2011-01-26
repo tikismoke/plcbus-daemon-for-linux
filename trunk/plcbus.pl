@@ -26,7 +26,7 @@
 # Suggested command line interaction for above example:
 #	echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc localhost 5151
 # If sending commands across a slow network you may need to increase the 
-# interval to 1 second in order to receive a response:
+# interval to 1 or 2 seconds in order to receive a response:
 #	echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 serverip 5151
 #
 ###############################################################################
@@ -133,11 +133,8 @@ sub plcbus_tx_command
 
 	# prepare command and data
 	$plcbus_command = $plcbus_command_to_hex {$params_data[1]};	# Convert ASCII command to corresponding PLCBUS hex code
-	$plcbus_data1 = hex ($params_data[2]) if (($plcbus_command == 0x04) || ($plcbus_command == 0x05) || 
-		($plcbus_command == 0x0a) || ($plcbus_command == 0x0c) || ($plcbus_command == 0x0d) || ($plcbus_command == 0x10) ||
-		($plcbus_command == 0x11) || ($plcbus_command == 0x1a) || ($plcbus_command == 0x1b));
-	$plcbus_data2 = hex ($params_data[3]) if (($plcbus_command == 0x0c) || ($plcbus_command == 0x0d) ||
-		($plcbus_command == 0x10) || ($plcbus_command == 0x11) || ($plcbus_command == 0x1a) || ($plcbus_command == 0x1b));
+	$plcbus_data1 = hex ($params_data[2]) if defined(params_data[2]);
+	$plcbus_data2 = hex ($params_data[3]) if defined(params_data[3]);
 	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
@@ -213,10 +210,10 @@ sub plcbus_rx_valid_frame
 		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X", $data[0], $data[1], $data[2],
 			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8];
 		# Does it have a payload of six bytes and start with STX and ends with ETX?
-		if ((($data[1] == 0x06) && ($data[0] == 0x02) && ($data[8] == 0x03))
+		if (($data[1] == 0x06) && ($data[0] == 0x02) && (($data[8] == 0x03)
 		
 		# Support for the PLCBUS-1141 PLUS (+) computer interface
-		|| (($data[1] == 0x06) && ((sum(@data) % 0x100) == 0x0)))
+		|| ((sum(@data) % 0x100) == 0x0)))
 		{
 		# Yes it does, we have a valid frame!
 		        printf "\n";
