@@ -133,8 +133,8 @@ sub plcbus_tx_command
 
 	# prepare command and data
 	$plcbus_command = $plcbus_command_to_hex {$params_data[1]};	# Convert ASCII command to corresponding PLCBUS hex code
-	$plcbus_data1 = hex ($params_data[2]) if defined(params_data[2]);
-	$plcbus_data2 = hex ($params_data[3]) if defined(params_data[3]);
+	$plcbus_data1 = hex ($params_data[2]) if defined($params_data[2]);
+	$plcbus_data2 = hex ($params_data[3]) if defined($params_data[3]);
 	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
