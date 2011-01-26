@@ -36,12 +36,13 @@ use IO::Socket;
 use Time::HiRes qw(sleep);
 use IO::Socket::INET;
 use SerialLibs::IOSelectBuffered;
+use List::Util qw(sum);
 
 #my $serdev = '/dev/plcbus';	# Serial Port device (using custom udev rule)
 my $serdev = '/dev/ttyS0';	# COM1
 my $serport;			# handle for the serial port
 my $listenport = 5151;
-my $plcbus_usercode = 0xFF;	# Usercode, custom value can be (0x00-0xFF) 
+my $plcbus_usercode = 0xff;	# Usercode, custom value can be (0x00-0xFF) 
                                 # chosen to avoid interference with neighbors
 
 # Hash containing relation between ASCII command and PLCBUS command hex code
@@ -215,7 +216,7 @@ sub plcbus_rx_valid_frame
 		if ((($data[1] == 0x06) && ($data[0] == 0x02) && ($data[8] == 0x03))
 		
 		# Support for the PLCBUS-1141 PLUS (+) computer interface
-		|| (($data[1] == 0x06) && ((($data[0] + $data[1] + $data[2] + $data[3] + $data[4] + $data[5] + $data[6] + $data[7] + $data[8]) % 0x100) == 0x00)))
+		|| (($data[1] == 0x06) && ((sum(@data) % 0x100) == 0x0)))
 		{
 		# Yes it does, we have a valid frame!
 		        printf "\n";
