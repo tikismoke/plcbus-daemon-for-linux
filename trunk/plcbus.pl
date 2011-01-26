@@ -2,22 +2,17 @@
 
 ###############################################################################
 #
-# Created by Wayne Thomas
-#
-# History
-#
-# 200xxxxx Initial version by Wayne Thomas, based upon hub_plcbus.pl (written
-#          by Jfn of  domoticaforum) with some code borrowed from Ron Frazier
-#          (http://www.ronfrazier.net).
-#
-# 20110125 Support added for PLCBUS-1141 PLUS (+) computer interface by Maurice
-#          de Bijl (http://www.ruwebit.net) by checking received frames
-#          against checksum instead of ETX byte. Based up on knowledge from
-#          http://www.domoticaforum.eu/viewtopic.php?f=38&t=5735
-#
+# Created by Wayne Thomas, contributions by Maurice de Bijl
 #
 # Listens on the designated TCP port for correctly formatted commands and passes them to the 
 # PLCBUS adaptor then returns the response.
+#
+#	 Initial version by Wayne Thomas, based upon hub_plcbus.pl (written
+#	 by Jfn of  domoticaforum) with some code borrowed from Ron Frazier
+# 	(http://www.ronfrazier.net).
+#
+# Latest version and discussion, see http://code.google.com/p/plcbus-daemon-for-linux/
+# History, see http://code.google.com/p/plcbus-daemon-for-linux/source/list
 #
 # Feel free to do anything you want with this, as long as you
 # include the above attribution.
