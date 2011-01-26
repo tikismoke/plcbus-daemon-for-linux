@@ -43,9 +43,11 @@ use IO::Socket::INET;
 use SerialLibs::IOSelectBuffered;
 
 #my $serdev = '/dev/plcbus';	# Serial Port device (using custom udev rule)
-my $serdev = '/dev/ttyS0';
+my $serdev = '/dev/ttyS0';	# COM1
 my $serport;			# handle for the serial port
 my $listenport = 5151;
+my $plcbus_usercode = 0xFF;	# Usercode, custom value can be (0x00-0xFF) 
+                                # chosen to avoid interference with neighbors
 
 # Hash containing relation between ASCII command and PLCBUS command hex code
 #
@@ -141,7 +143,7 @@ sub plcbus_tx_command
 	$plcbus_data2 = hex ($params_data[3]) if (($plcbus_command == 0x0c) || ($plcbus_command == 0x0d) ||
 		($plcbus_command == 0x10) || ($plcbus_command == 0x11) || ($plcbus_command == 0x1a) || ($plcbus_command == 0x1b));
 	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
-	$plcbus_frame = pack ('C*', 0x02, 0x05, 0xff, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
+	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
 	while (1)
@@ -215,10 +217,10 @@ sub plcbus_rx_valid_frame
 		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X", $data[0], $data[1], $data[2],
 			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8];
 		# Does it have a payload of six bytes and start with STX and ends with ETX?
-		if ((($data[1] == 6) && ($data[0] == 0x02) && ($data[8] == 0x03))
+		if ((($data[1] == 0x06) && ($data[0] == 0x02) && ($data[8] == 0x03))
 		
 		# Support for the PLCBUS-1141 PLUS (+) computer interface
-		|| (($data[1] == 6) && ((($data[0] + $data[1] + $data[2] + $data[3] + $data[4] + $data[5] + $data[6] + $data[7] + $data[8]) % 0x100) == 0x00)))
+		|| (($data[1] == 0x06) && ((($data[0] + $data[1] + $data[2] + $data[3] + $data[4] + $data[5] + $data[6] + $data[7] + $data[8]) % 0x100) == 0x00)))
 		{
 		# Yes it does, we have a valid frame!
 		        printf "\n";
