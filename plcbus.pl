@@ -137,6 +137,7 @@ sub help
 	print	"				    appropriate command, but wont wait to ensure the target\n";
 	print	"				    module has executed it.\n\n";
 	print	"&:		Used to daemonise plcbus.pl\n\n";
+	print	"Example:	plcbus.pl --device=/dev/ttyUSB0 --port=1221 &\n\n";
 	return;
 }
 
@@ -190,7 +191,7 @@ sub plcbus_tx_command
 	$plcbus_command = $plcbus_command_to_hex {$params_data[1]};	# Convert ASCII command to corresponding PLCBUS hex code
 	$plcbus_data1 = hex ($params_data[2]) if defined($params_data[2]);
 	$plcbus_data2 = hex ($params_data[3]) if defined($params_data[3]);
-	printf "Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", $plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2;
+	printf "Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", $plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2 if ($verbose);
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
@@ -198,7 +199,7 @@ sub plcbus_tx_command
 	{
 		my ($bytes, $read) = $serport->read(1);
 		last if $bytes == 0;
-		print "$bytes byte --> $read <-- cleared from buffer\n";
+		print "$bytes byte --> $read <-- cleared from buffer\n" if ($verbose);
 	}
 
 	foreach (1..3)
@@ -263,7 +264,7 @@ sub plcbus_rx_valid_frame
 	if (scalar @data == 9)
 	{
 		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X", $data[0], $data[1], $data[2],
-			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8];
+			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8] if ($verbose);
 		# Does it have a payload of six bytes and start with STX and ends with ETX?
 		if (($data[1] == 0x06) && ($data[0] == 0x02) && (($data[8] == 0x03)
 		
@@ -271,12 +272,12 @@ sub plcbus_rx_valid_frame
 		|| ((sum(@data) % 0x100) == 0x0)))
 		{
 		# Yes it does, we have a valid frame!
-		        print "\n";
+		        print "\n" if ($verbose);
 			return 1;
 		} else
 		{
 			# Bummer, better luck next time
-			print " - not a valid frame\n";
+			print " - not a valid frame\n" if ($verbose);
 			return 0;
 		}
 	}
@@ -288,6 +289,7 @@ sub plcbus_rx_status
 {
 	my @data = @_;
 	my $status = sprintf ("%d", $data[4] & 0x1F);
+
 	if (($data[7] == 0x0C) || (($data[7] == 0x20) && (($status != 0x0F) && ($status != 0x18) && ($status != 0x19))) ||
 		(($data[7] == 0x1C) && (($status == 0x00) || ($status == 0x01) || ($status == 0x06) || ($status == 0x07) ||
 		($status == 0x08) || ($status == 0x09))))
@@ -385,5 +387,5 @@ while(my @ready = $select->can_read())
 
         };
 };
-print "EXITING\n";
+print "EXITING\n" if ($verbose);
 exit;
