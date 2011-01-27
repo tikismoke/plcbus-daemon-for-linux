@@ -17,7 +17,7 @@
 # Feel free to do anything you want with this, as long as you
 # include the above attribution.
 #
-# Accepts commands in the following format:
+# Accepts commands through the designated port in the following format:
 #	homeunit,command,[hexvalue1],[hexvalue2]
 #
 # Example Command: A1,PRESET_DIM,64,5 (change dim value to max over 5 seconds)
@@ -37,13 +37,15 @@ use Time::HiRes qw(sleep);
 use IO::Socket::INET;
 use SerialLibs::IOSelectBuffered;
 use List::Util qw(sum);
+use Getopt::Long;
 
-#my $serdev = '/dev/plcbus';	# Serial Port device (using custom udev rule)
-my $serdev = '/dev/ttyS0';	# COM1
-my $serport;			# handle for the serial port
-my $listenport = 5151;
-my $plcbus_usercode = 0xff;	# Usercode, custom value can be (0x00-0xFF) 
+my $verbose = '';		# verbose flag, default is false
+my $serdev = '/dev/ttyS0';	# default serial device, typically COM1
+my $listenport = 5151;		# default tcp port
+my $plcbus_usercode = 0xff;	# default usercode, value can be (0x00-0xFF) 
                                 # chosen to avoid interference with neighbors
+my $phase = 1;			# number of phases, valid values are 1 or 3
+my $serport;                    # handle for the serial port
 
 # Hash containing relation between ASCII command and PLCBUS command hex code
 #
@@ -114,6 +116,59 @@ my %plcbus_hex_to_status = (
 	0x1f    => "REPORT_ON_ID_PULSE",
 );
 
+# Display help page
+sub help
+{
+	print	"\n	==================================================\n";
+	print	"	plcbus.pl - PLCBUS control server written in perl.\n";
+	print	"	==================================================\n\n";
+	print	"Usage: 		plcbus.pl [Options] [&]\n\n";
+	print	"Options:	--help		Display this page\n";
+	print	"		--info		Display info regarding plcbus.pl\n";
+	print	"		--verbose	Turn on verbose output\n";
+	print	"		--port		TCP Port to listen for commands on (default: 5151)\n";
+	print	"		--device	PLCBUS 1141 / 1141+ device location (default: /dev/ttyS0)\n";
+	print	"		--user		Unique hexidecimal User Code, chosen to prevent interference\n";
+	print	"				from neighbours (default: FF)\n";
+	print	"		--phase		Number of electrical phases in your house.  Valid values are:\n";
+	print	"				1 - Fully supported\n";
+	print	"				3 - Requires use of a PLCBUS 3-phase Coupler.  Currently\n";
+	print	"				    plcbus.pl will ensure that the Coupler has received the\n";
+	print	"				    appropriate command, but wont wait to ensure the target\n";
+	print	"				    module has executed it.\n\n";
+	print	"&:		Used to daemonise plcbus.pl\n\n";
+	return;
+}
+
+# Display Info page
+#
+sub info
+{
+	print   "\n     ==================================================\n";
+	print   "       plcbus.pl - PLCBUS control server written in perl.\n";
+	print   "       ==================================================\n\n";
+	print   "Created by Wayne Thomas, contributions by Maurice de Bijl\n\n";
+	print	"Listens on the designated TCP port for correctly formatted commands and passes them to the\n";
+	print	"PLCBUS adaptor then returns the response.\n\n";
+	print	"	Initial version by Wayne Thomas, based upon hub_plcbus.pl (written\n";
+	print	"	by Jfn of  domoticaforum) with some code borrowed from Ron Frazier\n";
+	print	"	(http://www.ronfrazier.net).\n\n";
+	print	"Latest version and discussion, see http://code.google.com/p/plcbus-daemon-for-linux/\n";
+	print	"History, see http://code.google.com/p/plcbus-daemon-for-linux/source/list\n\n";
+	print	"Feel free to do anything you want with this, as long as you\n";
+	print	"include the above attribution.\n\n";
+	print	"Accepts commands in the following format:\n";
+	print	"	homeunit,command,[hexvalue1],[hexvalue2]\n\n";
+	print	"Example Command: A1,PRESET_DIM,64,5 (change dim value to max over 5 seconds)\n";
+	print	"Example Response: PRESET_DIM,100,5 (responds in decimal)\n\n";
+	print	"Suggested command line interaction for above example:\n";
+	print	"	echo -e 'a1,preset_dim,64,5\\nEXIT\\n' | nc localhost 5151\n";
+	print	"If sending commands across a slow network you may need to increase the\n";
+	print	"interval to 1 or 2 seconds in order to receive a response:\n";
+	print	"	echo -e 'a1,preset_dim,64,5\\nEXIT\\n' | nc -i 1 serverip 5151\n\n";
+	return;
+}
+
 
 # Send command to PLCBUS
 #
@@ -135,7 +190,7 @@ sub plcbus_tx_command
 	$plcbus_command = $plcbus_command_to_hex {$params_data[1]};	# Convert ASCII command to corresponding PLCBUS hex code
 	$plcbus_data1 = hex ($params_data[2]) if defined($params_data[2]);
 	$plcbus_data2 = hex ($params_data[3]) if defined($params_data[3]);
-	printf "Sent Packet     = 02 05 ff %02x %02x %02x %02x 03\n", $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, plcbus_data2;
+	printf "Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", $plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2;
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
@@ -216,12 +271,12 @@ sub plcbus_rx_valid_frame
 		|| ((sum(@data) % 0x100) == 0x0)))
 		{
 		# Yes it does, we have a valid frame!
-		        printf "\n";
+		        print "\n";
 			return 1;
 		} else
 		{
 			# Bummer, better luck next time
-			printf " - not a valid frame\n";
+			print " - not a valid frame\n";
 			return 0;
 		}
 	}
@@ -248,6 +303,21 @@ sub plcbus_rx_status
 #
 # Start of MAIN program
 #
+
+my $help = '';
+my $info = '';
+
+# Process any options passed in
+#
+GetOptions (	'verbose' =>	\$verbose,
+		'help' =>	\$help,
+		'info' =>	\$info,
+		'port=i' =>	\$listenport,
+		'user=s' =>	\$plcbus_usercode,
+		'phase=i' =>	\$phase,
+		'device=s' =>	\$serdev);
+if ($help) { help(); exit 0;}
+if ($info) { info(); exit 0;}
 
 # Open serial port to the PLCBUS controller
 #
