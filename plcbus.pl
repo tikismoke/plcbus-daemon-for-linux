@@ -42,8 +42,7 @@ use Getopt::Long;
 my $verbose = '';		# verbose flag, default is false
 my $serdev = '/dev/ttyS0';	# default serial device, typically COM1
 my $listenport = 5151;		# default tcp port
-my $plcbus_usercode = 0xff;	# default usercode, value can be (0x00-0xFF) 
-                                # chosen to avoid interference with neighbors
+my $plcbus_usercode = '0xFF';	# default usercode, value can be (00-FF) 
 my $phase = 1;			# number of phases, valid values are 1 or 3
 my $serport;                    # handle for the serial port
 
@@ -175,11 +174,12 @@ sub info
 #
 sub plcbus_tx_command
 {
+	my ($handle, $params) = @_;
+	$params = uc($params);
 	$plcbus_data1 = 0x0;
 	$plcbus_data2 = 0x0;
-
 	my $result;
-	my $params = uc(shift);
+
 	my @params_data = split(/\,/, $params); # Split the command in its various parts (Example: A1,ON; D4,DIM,10,1)
 
 	$plcbus_homeunit = hex ($params_data[0]) - 0xa1;	# Convert homeunit to hex value (Example: C9 --> 0x28)
@@ -187,28 +187,31 @@ sub plcbus_tx_command
 	# if command is not valid return to main
 	return 0 unless (defined ($plcbus_command_to_hex{$params_data[1]}));
 
-	# prepare command and data
-	$plcbus_command = $plcbus_command_to_hex {$params_data[1]};	# Convert ASCII command to corresponding PLCBUS hex code
+	# prepare command and data for transmission
+	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]}) + 0x20;
+	$plcbus_command += 0x40 if ($phase == 3);
 	$plcbus_data1 = hex ($params_data[2]) if defined($params_data[2]);
 	$plcbus_data2 = hex ($params_data[3]) if defined($params_data[3]);
-	printf "Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", $plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2 if ($verbose);
-	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command + 0x20, $plcbus_data1, $plcbus_data2, 0x03);
+	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
 	while (1)
 	{
 		my ($bytes, $read) = $serport->read(1);
 		last if $bytes == 0;
-		print "$bytes byte --> $read <-- cleared from buffer\n" if ($verbose);
+		$read = sprintf ("%02x", (unpack ('C*', $read)));
+		syswrite ($handle, "$bytes byte --> $read <-- cleared from buffer\n") if ($verbose);
 	}
 
 	foreach (1..3)
 	{
 		# send prepared command to controller
 		$serport->write ($plcbus_frame);
+		syswrite ($handle, (sprintf ("Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", 
+			$plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2))) if ($verbose);
 
 		# listen for feedback
-		$result = plcbus_check_status();
+		$result = plcbus_check_status($handle, $plcbus_command);
 		last unless ($result =~ 'ERROR');
 	}
 	return $result;
@@ -223,7 +226,8 @@ sub plcbus_check_status
 	# One transmitted command over the PLCBUS will result in two or three return packets, including a status message
 	# We listen for a maximum of 3 seconds for all packets received and filter out the relevant status. Should we 
 	# receive it earlier, then break from the loop
-	#
+
+	my ($handle, $action) = @_;
 	my $plcbus_status = '';
 	eval
 	{
@@ -234,9 +238,9 @@ sub plcbus_check_status
 			my $plcbus_frame=$serport->read(9);
 			my @params_data = unpack ('C*', $plcbus_frame);
                         
-			if (plcbus_rx_valid_frame (@params_data))
+			if (plcbus_rx_valid_frame ($handle, @params_data))
 			{
-				if (plcbus_rx_status(@params_data))	# Did we receive a valid frame and does it contain a status message
+				if (plcbus_rx_status($handle, $action, @params_data))	# Did we receive a valid frame and does it contain a status message
 				{
 					my $test=sprintf ("%d", $params_data[4] & 0x1f);
 					next READ unless (defined($plcbus_hex_to_status{$test}));
@@ -258,26 +262,27 @@ sub plcbus_check_status
 #
 sub plcbus_rx_valid_frame
 {
-	my @data = @_;
+	my ($handle, @data) = @_;
 
 	# Did we receive a valid 9 byte PLCBUS frame?
 	if (scalar @data == 9)
 	{
-		printf "Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X", $data[0], $data[1], $data[2],
-			$data[3], $data[4], $data[5], $data[6], $data[7], $data[8] if ($verbose);
+		syswrite ($handle, (sprintf("Received Packet = %02X %02X %02X %02X %02X %02X %02X %02X %02X",
+			$data[0], $data[1], $data[2], $data[3], $data[4], $data[5], $data[6], $data[7], $data[8]))) if $verbose;
+
 		# Does it have a payload of six bytes and start with STX and ends with ETX?
 		if (($data[1] == 0x06) && ($data[0] == 0x02) && (($data[8] == 0x03)
 		
 		# Support for the PLCBUS-1141 PLUS (+) computer interface
 		|| ((sum(@data) % 0x100) == 0x0)))
 		{
-		# Yes it does, we have a valid frame!
-		        print "\n" if ($verbose);
+			# Yes it does, we have a valid frame!
+		        syswrite ($handle, "\n") if $verbose;
 			return 1;
 		} else
 		{
 			# Bummer, better luck next time
-			print " - not a valid frame\n" if ($verbose);
+			syswrite ($handle, " - not a valid frame\n") if $verbose;
 			return 0;
 		}
 	}
@@ -287,20 +292,36 @@ sub plcbus_rx_valid_frame
 #
 sub plcbus_rx_status
 {
-	my @data = @_;
+	my ($handle, $action, @data) = @_;
 	my $status = sprintf ("%d", $data[4] & 0x1F);
+	$action = $action & 0x1F;
 
-	if (($data[7] == 0x0C) || (($data[7] == 0x20) && (($status != 0x0F) && ($status != 0x18) && ($status != 0x19))) ||
-		(($data[7] == 0x1C) && (($status == 0x00) || ($status == 0x01) || ($status == 0x06) || ($status == 0x07) ||
-		($status == 0x08) || ($status == 0x09))))
-	{
-		return 1;
-	}
-	else
-	{
-		return 0;
-	}
+	# if a query command (request or get) wait for a PLCBUS success report from another unit (not the 1141(+))
+	#
+	if (($action == 0x0F) || ($action == 0x18) || ($action == 0x19)) {
+		if ($data[7] == 0x0C) {
+			return 1; }
+		else {
+			return 0; }
+	};
+
+	# if a scene setup / erase, or a on / off to a scene address (homeunit P1 - PF) only wait for a local PLCBUS success report
+	#
+	if (($action == 0x12) || ($action == 0x13) || ($action == 0x14) ||
+			((($action == 0x02) || ($action == 0x03)) && ($data[3] & 0xF0))) {
+		if ($data[7] == 0x1C) {
+			return 1; }
+		else {
+			return 0; }
+	};
+
+	# all other commands only require an ACK 
+	if ($data[7] == 0x20) {
+		return 1; }
+	else {
+		return 0; }
 }
+
 
 #
 # Start of MAIN program
@@ -320,6 +341,10 @@ GetOptions (	'verbose' =>	\$verbose,
 		'device=s' =>	\$serdev);
 if ($help) { help(); exit 0;}
 if ($info) { info(); exit 0;}
+
+$plcbus_usercode = hex ($plcbus_usercode);
+die "Invalid UserCode - Valid values are 00 - FF\n" if (($plcbus_usercode < 0x00) || ($plcbus_usercode > 0xFF));
+die "Invalid number of Phases - Legal values are 1 or 3\n" unless (($phase == 1) || ($phase == 3));
 
 # Open serial port to the PLCBUS controller
 #
@@ -377,7 +402,7 @@ while(my @ready = $select->can_read())
                         next;
                 };
 
-		my $plcbus_result = plcbus_tx_command ($line);
+		my $plcbus_result = plcbus_tx_command ($handle, $line);
 
 		# If illegal command or illegal reply received
 		$plcbus_result = "ERROR, Illegal PLCBUS Command or Reply" if ($plcbus_result eq '0');
