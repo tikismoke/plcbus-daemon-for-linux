@@ -17,17 +17,8 @@
 # Feel free to do anything you want with this, as long as you
 # include the above attribution.
 #
-# Accepts commands through the designated port in the following format:
-#	homeunit,command,[hexvalue1],[hexvalue2]
 #
-# Example Command: A1,PRESET_DIM,64,5 (change dim value to max over 5 seconds)
-# Example Response: PRESET_DIM,100,5 (responds in decimal)
-#
-# Suggested command line interaction for above example:
-#	echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc localhost 5151
-# If sending commands across a slow network you may need to increase the 
-# interval to 1 or 2 seconds in order to receive a response:
-#	echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 serverip 5151
+# For more information, execute 'plcbus.pl --info'
 #
 ###############################################################################
 
@@ -137,6 +128,7 @@ sub help
 	print	"				    module has executed it.\n\n";
 	print	"&:		Used to daemonise plcbus.pl\n\n";
 	print	"Example:	plcbus.pl --device=/dev/ttyUSB0 --port=1221 &\n\n";
+	print	"For more information execute 'plcbus.pl --info'\n\n";
 	return;
 }
 
@@ -158,14 +150,40 @@ sub info
 	print	"Feel free to do anything you want with this, as long as you\n";
 	print	"include the above attribution.\n\n";
 	print	"Accepts commands in the following format:\n";
-	print	"	homeunit,command,[hexvalue1],[hexvalue2]\n\n";
-	print	"Example Command: A1,PRESET_DIM,64,5 (change dim value to max over 5 seconds)\n";
-	print	"Example Response: PRESET_DIM,100,5 (responds in decimal)\n\n";
+	print	"	homeunit,command,[value1],[value2]\n\n";
+	print	"Valid HomeUnit codes are from A1 - A16 through to P1 - P16\n";
+	print	"	Note:   HomeUnits P1 through to P15 have been reserved for scenes to ensure\n";
+	print	"		correct behavior of the server (scenes to not transmit an acknowledgement)\n";
+	print	"	Note2:  HomeUnit P16 appears to be a 'All Units' address.\n\n";
+	print	"Example Command: A14,PRESET_DIM,100,5 (change dim value to 100% over 5 seconds)\n";
+	print	"Example Response: PRESET_DIM,100,5 (confirms command executed by PLCBUS module)\n\n";
 	print	"Suggested command line interaction for above example:\n";
-	print	"	echo -e 'a1,preset_dim,64,5\\nEXIT\\n' | nc localhost 5151\n";
+	print	"	echo -e 'a14,preset_dim,100,5\\nEXIT\\n' | nc localhost 5151\n";
 	print	"If sending commands across a slow network you may need to increase the\n";
 	print	"interval to 1 or 2 seconds in order to receive a response:\n";
-	print	"	echo -e 'a1,preset_dim,64,5\\nEXIT\\n' | nc -i 1 serverip 5151\n\n";
+	print	"	echo -e 'a14,preset_dim,100,5\\nEXIT\\n' | nc -i 1 serverip 5151\n\n";
+	print	"Valid commands:\n\n";
+	print	"-	homeunit,ALL_UNITS_OFF\n";
+	print	"-	homeunit,ALL_LIGHTS_ON\n";
+	print	"-	homeunit,ON\n";
+	print	"-	homeunit,OFF\n";
+	print	"-	homeunit,DIM,fadetime\n";
+	print	"-	homeunit,BRIGHT,fadetime\n";
+	print	"-	homeunit,ALL_LIGHTS_OFF\n";
+	print	"-	homeunit,ALL_USER_LIGHTS_ON\n";
+	print	"-	homeunit,ALL_USER_UNITS_OFF\n";
+	print	"-	homeunit,ALL_USER_LIGHTS_OFF\n";
+	print	"-	homeunit,FADE_STOP\n";
+	print	"-	homeunit,PRESET_DIM,fadelevel,fadetime\n";
+	print	"-	homeunit,STATUS_REQUEST\n";
+	print	"-	homeunit,RX_MASTER_ADDR_SETUP,newusercode,newhomeunit\n";
+	print	"-	homeunit,TX_MASTER_ADDR_SETUP,newusercode,newhomeunit\n";
+	print	"-	homeunit,SCENE_ADDR_SETUP,state	==> state ON = 2, state OFF = 3\n";
+	print	"-	homeunit,SCENE_ADDR_ERASE\n";
+	print	"-	homeunit,ALL_SCENES_ADDR_ERASE\n";
+	print	"-	homeunit,GET_SIGNAL_STRENGTH\n";
+	print	"-	homeunit,GET_NOISE_STRENGTH\n\n";
+
 	return;
 }
 
@@ -182,7 +200,14 @@ sub plcbus_tx_command
 
 	my @params_data = split(/\,/, $params); # Split the command in its various parts (Example: A1,ON; D4,DIM,10,1)
 
-	$plcbus_homeunit = hex ($params_data[0]) - 0xa1;	# Convert homeunit to hex value (Example: C9 --> 0x28)
+	my @homeunit = split(//, $params_data[0]);
+	my $home = unpack ('C*', $homeunit[0]) - 65;
+	my $unit = substr ($params_data[0], 1, 2);
+	if (($home < 0) || ($home > 16) || ($unit =~ /\D/) || ($unit <1) || ($unit > 16)) {
+		syswrite ($handle, "ERROR, Illegal HomeUnit Code\n");
+		return 0;
+	}
+	my $plcbus_homeunit = $home*16 + $unit - 1;
 
 	# if command is not valid return to main
 	return 0 unless (defined ($plcbus_command_to_hex{$params_data[1]}));
@@ -190,8 +215,8 @@ sub plcbus_tx_command
 	# prepare command and data for transmission
 	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]}) + 0x20;
 	$plcbus_command += 0x40 if ($phase == 3);
-	$plcbus_data1 = hex ($params_data[2]) if defined($params_data[2]);
-	$plcbus_data2 = hex ($params_data[3]) if defined($params_data[3]);
+	$plcbus_data1 = $params_data[2] if defined($params_data[2]);
+	$plcbus_data2 = $params_data[3] if defined($params_data[3]);
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
@@ -308,7 +333,7 @@ sub plcbus_rx_status
 	# if a scene setup / erase, or a on / off to a scene address (homeunit P1 - PF) only wait for a local PLCBUS success report
 	#
 	if (($action == 0x12) || ($action == 0x13) || ($action == 0x14) ||
-			((($action == 0x02) || ($action == 0x03)) && ($data[3] & 0xF0))) {
+			((($action == 0x02) || ($action == 0x03)) && ((($data[3] & 0xF0) == 0xF0)))) {
 		if ($data[7] == 0x1C) {
 			return 1; }
 		else {
@@ -343,8 +368,8 @@ if ($help) { help(); exit 0;}
 if ($info) { info(); exit 0;}
 
 $plcbus_usercode = hex ($plcbus_usercode);
-die "Invalid UserCode - Valid values are 00 - FF\n" if (($plcbus_usercode < 0x00) || ($plcbus_usercode > 0xFF));
-die "Invalid number of Phases - Legal values are 1 or 3\n" unless (($phase == 1) || ($phase == 3));
+die "Invalid UserCode - Valid values are 00 - FF. Stopped\n" if (($plcbus_usercode < 0x00) || ($plcbus_usercode > 0xFF));
+die "Invalid number of Phases - Legal values are 1 or 3. Stopped\n" unless (($phase == 1) || ($phase == 3));
 
 # Open serial port to the PLCBUS controller
 #
