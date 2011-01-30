@@ -199,24 +199,39 @@ sub plcbus_tx_command
 	my $result;
 
 	my @params_data = split(/\,/, $params); # Split the command in its various parts (Example: A1,ON; D4,DIM,10,1)
-
+	if (!defined($params_data[1])) {
+		syswrite ($handle, "ERROR, Illegal Command Format\n");
+		return 0;
+	}
 	my @homeunit = split(//, $params_data[0]);
 	my $home = unpack ('C*', $homeunit[0]) - 65;
 	my $unit = substr ($params_data[0], 1, 2);
-	if (($home < 0) || ($home > 16) || ($unit =~ /\D/) || ($unit <1) || ($unit > 16)) {
+	if (($home =~ /\D/) || ($home < 0) || ($home > 16) || ($unit =~ /\D/) || ($unit <1) || ($unit > 16)) {
 		syswrite ($handle, "ERROR, Illegal HomeUnit Code\n");
 		return 0;
 	}
 	my $plcbus_homeunit = $home*16 + $unit - 1;
 
 	# if command is not valid return to main
-	return 0 unless (defined ($plcbus_command_to_hex{$params_data[1]}));
+	if (!defined ($plcbus_command_to_hex{$params_data[1]})) {
+		syswrite ($handle, "ERROR, Unknown PLCBUS Command\n");
+		return 0;
+	}
 
 	# prepare command and data for transmission
 	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]}) + 0x20;
 	$plcbus_command += 0x40 if ($phase == 3);
 	$plcbus_data1 = $params_data[2] if defined($params_data[2]);
+	if (($plcbus_data1 =~/\D/) || ($plcbus_data1 < 0) || ($plcbus_data1 > 100)) {
+		syswrite ($handle, "ERROR, Illegal Data1 Value\n");
+		return 0;
+	}
 	$plcbus_data2 = $params_data[3] if defined($params_data[3]);
+	if (($plcbus_data2 =~/\D/) || ($plcbus_data2 < 0) || ($plcbus_data2 > 100)) {
+		syswrite ($handle, "ERROR, Illegal Data2 Value\n");
+		return 0;
+	}
+
 	$plcbus_frame = pack ('C*', 0x02, 0x05, $plcbus_usercode, $plcbus_homeunit, $plcbus_command, $plcbus_data1, $plcbus_data2, 0x03);
 
 	# Empty any loafing data from the serial buffer
@@ -416,7 +431,7 @@ while(my @ready = $select->can_read())
                         $handle->close();
                         next;
                 };
-                next if $line eq '';
+                next if ($line eq "\n");
 
                 $line =~ s/[\n\r\f]+$//ms;
 
@@ -437,5 +452,5 @@ while(my @ready = $select->can_read())
 
         };
 };
-print "EXITING\n" if ($verbose);
+
 exit;
