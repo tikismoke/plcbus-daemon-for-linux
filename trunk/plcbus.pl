@@ -200,21 +200,21 @@ sub plcbus_tx_command
 
 	my @params_data = split(/\,/, $params); # Split the command in its various parts (Example: A1,ON; D4,DIM,10,1)
 	if (!defined($params_data[1])) {
-		syswrite ($handle, "ERROR, Illegal Command Format\n");
+		syswrite ($handle, "ERROR, Illegal Command Format\n") if $verbose;
 		return 0;
 	}
 	my @homeunit = split(//, $params_data[0]);
 	my $home = unpack ('C*', $homeunit[0]) - 65;
 	my $unit = substr ($params_data[0], 1, 2);
 	if (($home =~ /\D/) || ($home < 0) || ($home > 16) || ($unit =~ /\D/) || ($unit <1) || ($unit > 16)) {
-		syswrite ($handle, "ERROR, Illegal HomeUnit Code\n");
+		syswrite ($handle, "ERROR, Illegal HomeUnit Code\n") if $verbose;
 		return 0;
 	}
 	my $plcbus_homeunit = $home*16 + $unit - 1;
 
 	# if command is not valid return to main
 	if (!defined ($plcbus_command_to_hex{$params_data[1]})) {
-		syswrite ($handle, "ERROR, Unknown PLCBUS Command\n");
+		syswrite ($handle, "ERROR, Unknown PLCBUS Command\n") if $verbose;
 		return 0;
 	}
 
@@ -223,12 +223,12 @@ sub plcbus_tx_command
 	$plcbus_command += 0x40 if ($phase == 3);
 	$plcbus_data1 = $params_data[2] if defined($params_data[2]);
 	if (($plcbus_data1 =~/\D/) || ($plcbus_data1 < 0) || ($plcbus_data1 > 100)) {
-		syswrite ($handle, "ERROR, Illegal Data1 Value\n");
+		syswrite ($handle, "ERROR, Illegal Data1 Value\n") if $verbose;
 		return 0;
 	}
 	$plcbus_data2 = $params_data[3] if defined($params_data[3]);
 	if (($plcbus_data2 =~/\D/) || ($plcbus_data2 < 0) || ($plcbus_data2 > 100)) {
-		syswrite ($handle, "ERROR, Illegal Data2 Value\n");
+		syswrite ($handle, "ERROR, Illegal Data2 Value\n") if $verbose;
 		return 0;
 	}
 
@@ -252,8 +252,9 @@ sub plcbus_tx_command
 
 		# listen for feedback
 		$result = plcbus_check_status($handle, $plcbus_command);
-		last unless ($result =~ 'ERROR');
+		last unless (!$result);
 	}
+	syswrite ($handle, "ERROR, no repsonse\n") if ($verbose && !$result);
 	return $result;
 }
 
@@ -272,7 +273,7 @@ sub plcbus_check_status
 	eval
 	{
 		local $SIG{ALRM} = sub { die };
-		alarm 3;
+		alarm 2;
 		READ : while (1)
 		{
 			my $plcbus_frame=$serport->read(9);
@@ -292,7 +293,7 @@ sub plcbus_check_status
 		}
 		alarm 0;
 		1;
-	} or $plcbus_status = "ERROR, no response";
+	} or return 0;
 
 	return $plcbus_status;
 }
@@ -345,10 +346,10 @@ sub plcbus_rx_status
 			return 0; }
 	};
 
-	# if a scene setup / erase, or a on / off to a scene address (homeunit P1 - PF) only wait for a local PLCBUS success report
+	# if a scene setup / erase, or a on / off to a scene address (homeunit P1 - PE) only wait for a local PLCBUS success report
 	#
 	if (($action == 0x12) || ($action == 0x13) || ($action == 0x14) ||
-			((($action == 0x02) || ($action == 0x03)) && ((($data[3] & 0xF0) == 0xF0)))) {
+			((($action == 0x02) || ($action == 0x03)) && (($data[3] >= 0xF0) && ($data[3] < 0xFF)))) {
 		if ($data[7] == 0x1C) {
 			return 1; }
 		else {
@@ -445,10 +446,10 @@ while(my @ready = $select->can_read())
 		my $plcbus_result = plcbus_tx_command ($handle, $line);
 
 		# If illegal command or illegal reply received
-		$plcbus_result = "ERROR, Illegal PLCBUS Command or Reply" if ($plcbus_result eq '0');
+		syswrite($handle, "Command FAIL\n") unless $plcbus_result;
 
 		# Send the caller a status report
-		syswrite($handle, "$plcbus_result\n");
+		syswrite($handle, "$plcbus_result\n") if $plcbus_result;
 
         };
 };
