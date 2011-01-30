@@ -66,7 +66,7 @@ my %plcbus_command_to_hex = (
 	'REPORT_SIGNAL_STRENGTH'=> 0x1a,
 	'REPORT_NOISE_STRENGTH' => 0x1b,
 	'GET_ALL_ID_PULSE'	=> 0x1c,
-	'GET_ONE_ID_PULSE'	=> 0x1d,
+	'GET_ON_ID_PULSE'	=> 0x1d,
 	'REPORT_ALL_ID_PULSE'	=> 0x1e,
 	'REPORT_ON_ID_PULSE'	=> 0x1f, );
 
@@ -101,7 +101,7 @@ my %plcbus_hex_to_status = (
 	0x1a    => "REPORT_SIGNAL_STRENGTH",
 	0x1b    => "REPORT_NOISE_STRENGTH",
 	0x1c    => "GET_ALL_ID_PULSE",
-	0x1d    => "GET_ONE_ID_PULSE",
+	0x1d    => "GET_ON_ID_PULSE",
 	0x1e	=> "REPORT_ALL_ID_PULSE",
 	0x1f    => "REPORT_ON_ID_PULSE",
 );
@@ -182,7 +182,9 @@ sub info
 	print	"-	homeunit,SCENE_ADDR_ERASE\n";
 	print	"-	homeunit,ALL_SCENES_ADDR_ERASE\n";
 	print	"-	homeunit,GET_SIGNAL_STRENGTH\n";
-	print	"-	homeunit,GET_NOISE_STRENGTH\n\n";
+	print	"-	homeunit,GET_NOISE_STRENGTH\n";
+	print	"-	homeunit,GET_ALL_ID_PULSE\n";
+	print	"-	homeunit,GET_ON_ID_PULSE\n\n";
 
 	return;
 }
@@ -219,7 +221,8 @@ sub plcbus_tx_command
 	}
 
 	# prepare command and data for transmission
-	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]}) + 0x20;
+	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]});
+	$plcbus_command += 0x20 unless (($plcbus_command == 0x1C) || ($plcbus_command == 0x1D));
 	$plcbus_command += 0x40 if ($phase == 3);
 	$plcbus_data1 = $params_data[2] if defined($params_data[2]);
 	if (($plcbus_data1 =~/\D/) || ($plcbus_data1 < 0) || ($plcbus_data1 > 100)) {
@@ -336,6 +339,15 @@ sub plcbus_rx_status
 	my ($handle, $action, @data) = @_;
 	my $status = sprintf ("%d", $data[4] & 0x1F);
 	$action = $action & 0x1F;
+
+	# if a get ID query command wait for a rxed ID Feedback signal
+	#
+	if (($action == 0x1C) || ($action == 0x1D)) {
+		if ($data[7] == 0x40) {
+			return 1; }
+		else {
+			return 0; }
+	};
 
 	# if a query command (request or get) wait for a PLCBUS success report from another unit (not the 1141(+))
 	#
