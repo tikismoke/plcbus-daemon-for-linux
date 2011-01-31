@@ -123,9 +123,10 @@ sub help
 	print	"		--phase		Number of electrical phases in your house.  Valid values are:\n";
 	print	"				1 - Fully supported\n";
 	print	"				3 - Requires use of a PLCBUS 3-phase Coupler.  Currently\n";
-	print	"				    plcbus.pl will ensure that the Coupler has received the\n";
-	print	"				    appropriate command, but wont wait to ensure the target\n";
-	print	"				    module has executed it.\n\n";
+	print	"				    this is untested, but should work if version 2.3 of the\n";
+	print	"				    RS232 to PLCBUS Control Transport Protocol document is\n";
+	print	"				    correct.  At worst the commands should work but you will\n";
+	print	"				    receive false Command FAIL messages.\n\n";
 	print	"&:		Used to daemonise plcbus.pl\n\n";
 	print	"Example:	plcbus.pl --device=/dev/ttyUSB0 --port=1221 &\n\n";
 	print	"For more information execute 'plcbus.pl --info'\n\n";
@@ -152,9 +153,12 @@ sub info
 	print	"Accepts commands in the following format:\n";
 	print	"	homeunit,command,[value1],[value2]\n\n";
 	print	"Valid HomeUnit codes are from A1 - A16 through to P1 - P16\n";
-	print	"	Note:   HomeUnits P1 through to P15 have been reserved for scenes to ensure\n";
-	print	"		correct behavior of the server (scenes to not transmit an acknowledgement)\n";
-	print	"	Note2:  HomeUnit P16 appears to be a 'All Units' address.\n\n";
+	print	"	Note:   For each Home (A - P), Units 10 thru 16 have been reserved for Scene\n";
+	print	"		Addresses.  This is due to scenes not providing a response the same as\n";
+	print	"		individual modules.  If you do use a individual module with an address\n";
+	print	"		reserved for a scene it will still work.  Using a scene with a non-scene\n";
+	print	"		address will produce error messages but will work anyway.\n";
+	print	"	Note2:  HomeUnit P16 appears to be a 'All Units' or 'All Lights' address.\n\n";
 	print	"Example Command: A14,PRESET_DIM,100,5 (change dim value to 100% over 5 seconds)\n";
 	print	"Example Response: PRESET_DIM,100,5 (confirms command executed by PLCBUS module)\n\n";
 	print	"Suggested command line interaction for above example:\n";
@@ -222,6 +226,8 @@ sub plcbus_tx_command
 
 	# prepare command and data for transmission
 	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]});
+	if (($plcbus_command == 0x1C) || ($plcbus_command == 0x1D)) {
+		$plcbus_homeunit &= 0xF0; }
 	$plcbus_command += 0x20 unless (($plcbus_command == 0x1C) || ($plcbus_command == 0x1D));
 	$plcbus_command += 0x40 if ($phase == 3);
 	$plcbus_data1 = $params_data[2] if defined($params_data[2]);
@@ -251,10 +257,10 @@ sub plcbus_tx_command
 		# send prepared command to controller
 		$serport->write ($plcbus_frame);
 		syswrite ($handle, (sprintf ("Sent Packet     = 02 05 %02x %02x %02x %02x %02x 03\n", 
-			$plcbus_usercode, $plcbus_homeunit, $plcbus_command|0x20, $plcbus_data1, $plcbus_data2))) if ($verbose);
+			$plcbus_usercode, $plcbus_homeunit, $plcbus_command, $plcbus_data1, $plcbus_data2))) if ($verbose);
 
 		# listen for feedback
-		$result = plcbus_check_status($handle, $plcbus_command);
+		$result = plcbus_check_status($handle, $plcbus_homeunit, $plcbus_command);
 		last unless (!$result);
 	}
 	syswrite ($handle, "ERROR, no repsonse\n") if ($verbose && !$result);
@@ -271,7 +277,7 @@ sub plcbus_check_status
 	# We listen for a maximum of 3 seconds for all packets received and filter out the relevant status. Should we 
 	# receive it earlier, then break from the loop
 
-	my ($handle, $action) = @_;
+	my ($handle, $homeunit, $action) = @_;
 	my $plcbus_status = '';
 	eval
 	{
@@ -284,7 +290,7 @@ sub plcbus_check_status
                         
 			if (plcbus_rx_valid_frame ($handle, @params_data))
 			{
-				if (plcbus_rx_status($handle, $action, @params_data))	# Did we receive a valid frame and does it contain a status message
+				if (plcbus_rx_status($handle, $homeunit, $action, @params_data))	# Did we receive a valid frame and does it contain a status message
 				{
 					my $test=sprintf ("%d", $params_data[4] & 0x1f);
 					next READ unless (defined($plcbus_hex_to_status{$test}));
@@ -336,41 +342,52 @@ sub plcbus_rx_valid_frame
 #
 sub plcbus_rx_status
 {
-	my ($handle, $action, @data) = @_;
+	my ($handle, $homeunit, $action, @data) = @_;
 	my $status = sprintf ("%d", $data[4] & 0x1F);
 	$action = $action & 0x1F;
 
-	# if a get ID query command wait for a rxed ID Feedback signal
+	# if response is a direct response to the command issued
 	#
-	if (($action == 0x1C) || ($action == 0x1D)) {
-		if ($data[7] == 0x40) {
-			return 1; }
-		else {
-			return 0; }
-	};
+	if ($homeunit == $data[3]) {
 
-	# if a query command (request or get) wait for a PLCBUS success report from another unit (not the 1141(+))
-	#
-	if (($action == 0x0F) || ($action == 0x18) || ($action == 0x19)) {
-		if ($data[7] == 0x0C) {
-			return 1; }
-		else {
-			return 0; }
-	};
+		# if using three phase, wait for status report from coupler
+		#
+		if ($phase == 3) {
+			if (($data[4] == 0x0D) || ($data[4] == 0x0E) || ($data[4] >= 0x1E)) {
+				return 1; }
+		}
 
-	# if a scene setup / erase, or a on / off to a scene address (homeunit P1 - PE) only wait for a local PLCBUS success report
-	#
-	if (($action == 0x12) || ($action == 0x13) || ($action == 0x14) ||
-			((($action == 0x02) || ($action == 0x03)) && (($data[3] >= 0xF0) && ($data[3] < 0xFF)))) {
-		if ($data[7] == 0x1C) {
-			return 1; }
-		else {
-			return 0; }
-	};
+		# if a get ID query command wait for a rxed ID Feedback signal
+		#
+		elsif (($action == 0x1C) || ($action == 0x1D)) {
+			if ($data[7] == 0x40) {
+				return 1; }
+		}
 
-	# all other commands only require an ACK 
-	if ($data[7] == 0x20) {
-		return 1; }
+		# if a query command (request or get) wait for a PLCBUS success report from another unit (not the 1141(+))
+		#
+		elsif (($action == 0x0F) || ($action == 0x18) || ($action == 0x19)) {
+			if ($data[7] == 0x0C) {
+				return 1; }
+		}
+
+		# if a scene setup / erase, or a on / off to a scene address (Unit 10 - 16 for each Home) only send success is required
+		#
+		elsif (($action == 0x12) || ($action == 0x13) || ($action == 0x14) ||
+				((($action == 0x02) || ($action == 0x03)) && (($data[3] & 0x0F) >= 0x09))) {
+			if ($data[7] == 0x1C) {
+				return 1; }
+		}
+
+		# all other commands only require an ACK 
+		elsif ($data[7] == 0x20) {
+			return 1; };
+	}
+	elsif (($data[4] == 0x0D) || ($data[4] == 0x0E)) { 
+		syswrite ($handle, "Detected traffic initiated by seperate transmitter\n") if $verbose; 
+		# TODO: decipher and send report regarding detected traffic
+		return 0;
+	}
 	else {
 		return 0; }
 }
