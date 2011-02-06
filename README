@@ -1,0 +1,49 @@
+******************************************************************************
+Requirements:
+******************************************************************************
+
+- Installed Linux distribution (other platforms may also be supported, or not,
+	your mileage may vary).
+- The plcbus deamon server: plcbus.pl
+- Required Module originally written by Ron Frazer: IOSelectBurrered.pm
+
+******************************************************************************
+Installation
+******************************************************************************
+
+- Save plcbus.pl into an executable directory (I use /usr/local/bin) and make it
+	executable.
+- Save IOSelectBurrered.pm into a directory called SerialLibs (note the use of
+	uppercase letters) in one of the standard perl module locations (for 
+	instance /etc/perl/SerialLibs).
+- To see what options plcbus offers, execute:
+	plcbus.pl --help
+- Run the server in background with any required options, i.e."
+	plcbus.pl --device=/dev/ttyUSB0 --port=1221 --phase=3 &
+
+******************************************************************************
+Usage
+******************************************************************************
+
+Send commands from any network connected pc in the following format:
+
+homeunit,command,[data1],[data2]
+
+where:
+- homeunit is the desired PLCBUS unit address (A1 - A16 though P1 - P16).
+- command is the appropriate command (see the output of plcbus.pl for a list).
+- data1 is a decimal value between 0 and 100 (if required by the command).
+- data2 is a decimal value between 0 and 100 (if required by the command).
+
+If you wish to interact with the server in a interactive session use netcat to
+connect as follows:
+	netcat localhost 5151
+and type your commands. If the server is on a networked pc replace
+'localhost' with the hostname or ip address as necessary (likewise with the
+port number if you ran plcbus.pl with a non-default value).  To exit the
+session simply type 'exit'.
+
+If you wish to send commands in a single-shot method (i.e. from a script) try
+the following:
+	echo -e 'a1,preset_dim,50,2\nexit\n' | nc localhost 5151
+replacing the command, data values, hostname and port as necessary.
