@@ -218,6 +218,10 @@ sub plcbus_tx_command
 	}
 	my $plcbus_homeunit = $home*16 + $unit - 1;
 
+	# provide some flexibility in command syntax
+	$params_data[1] =~ s/-/_/;
+	$params_data[1] =~ s/ /_/;
+
 	# if command is not valid return to main
 	if (!defined ($plcbus_command_to_hex{$params_data[1]})) {
 		syswrite ($handle, "ERROR, Unknown PLCBUS Command\n") if $verbose;
