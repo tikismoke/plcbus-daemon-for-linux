@@ -53,8 +53,8 @@ my %plcbus_command_to_hex = (
 	'BLINK'			=> 0x0a,
 	'FADE_STOP'		=> 0x0b,
 	'PRESET_DIM'		=> 0x0c,
-	'STATUS_ON'		=> 0x0d,
-	'STATUS_OFF'		=> 0x0e,
+#	'STATUS_ON'		=> 0x0d,
+#	'STATUS_OFF'		=> 0x0e,
 	'STATUS_REQUEST'	=> 0x0f,
 	'RX_MASTER_ADDR_SETUP'	=> 0x10,
 	'TX_MASTER_ADDR_SETUP'	=> 0x11,
@@ -63,12 +63,13 @@ my %plcbus_command_to_hex = (
 	'ALL_SCENES_ADDR_ERASE'	=> 0x14,
 	'GET_SIGNAL_STRENGTH'	=> 0x18,
 	'GET_NOISE_STRENGTH'	=> 0x19,
-	'REPORT_SIGNAL_STRENGTH'=> 0x1a,
-	'REPORT_NOISE_STRENGTH' => 0x1b,
+#	'REPORT_SIGNAL_STRENGTH'=> 0x1a,
+#	'REPORT_NOISE_STRENGTH' => 0x1b,
 	'GET_ALL_ID_PULSE'	=> 0x1c,
 	'GET_ON_ID_PULSE'	=> 0x1d,
-	'REPORT_ALL_ID_PULSE'	=> 0x1e,
-	'REPORT_ON_ID_PULSE'	=> 0x1f, );
+#	'REPORT_ALL_ID_PULSE'	=> 0x1e,
+#	'REPORT_ON_ID_PULSE'	=> 0x1f, 
+);
 
 
 
@@ -219,8 +220,8 @@ sub plcbus_tx_command
 	my $plcbus_homeunit = $home*16 + $unit - 1;
 
 	# provide some flexibility in command syntax
-	$params_data[1] =~ s/-/_/;
-	$params_data[1] =~ s/ /_/;
+	$params_data[1] =~ s/-/_/g;
+	$params_data[1] =~ s/ /_/g;
 
 	# if command is not valid return to main
 	if (!defined ($plcbus_command_to_hex{$params_data[1]})) {
@@ -230,7 +231,7 @@ sub plcbus_tx_command
 
 	# prepare command and data for transmission
 	$plcbus_command = ($plcbus_command_to_hex {$params_data[1]});
-	if (($plcbus_command == 0x1C) || ($plcbus_command == 0x1D)) {
+	if (($plcbus_command >= 0x1C) || ($plcbus_command <= 0x1) || (($plcbus_command >= 0x06) && ($plcbus_command <=0x09))) {
 		$plcbus_homeunit &= 0xF0; }
 	$plcbus_command += 0x20 unless (($plcbus_command == 0x1C) || ($plcbus_command == 0x1D));
 	$plcbus_command += 0x40 if ($phase == 3);
@@ -286,7 +287,7 @@ sub plcbus_check_status
 	eval
 	{
 		local $SIG{ALRM} = sub { die };
-		alarm 2;
+		alarm 1;
 		READ : while (1)
 		{
 			my $plcbus_frame=$serport->read(9);
@@ -465,9 +466,15 @@ while(my @ready = $select->can_read())
                         $handle->close();
                         next;
                 };
-                next if ($line eq "\n");
 
                 $line =~ s/[\n\r\f]+$//ms;
+		if ($line eq '')
+		{
+			my $result = plcbus_check_status($handle);
+			$result = 'No loafing messages' if ($result == 0);
+			syswrite($handle, "$result\n") if $verbose;
+			next;
+		};
 
                 if ($line =~ /EXIT/i)
                 {
