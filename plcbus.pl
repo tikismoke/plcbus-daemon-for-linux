@@ -251,10 +251,17 @@ sub plcbus_tx_command
 	# Empty any loafing data from the serial buffer
 	while (1)
 	{
-		my ($bytes, $read) = $serport->read(1);
+		my ($bytes, $plcbus_frame) = $serport->read(9);
 		last if $bytes == 0;
-		$read = sprintf ("%02x", (unpack ('C*', $read)));
-		syswrite ($handle, "$bytes byte --> $read <-- cleared from buffer\n") if ($verbose);
+		my @params_data = unpack ('C*', $plcbus_frame);
+
+                if (plcbus_rx_valid_frame ($handle, @params_data))
+                {
+                	if (plcbus_rx_status($handle,undef,undef, @params_data))        # Did we receive a valid frame and does it contain a$
+               		{
+				plcbus_output_message ($handle, @params_data);
+			}
+		}
 	}
 
 	foreach (1..3)
@@ -297,16 +304,12 @@ sub plcbus_check_status
 			{
 				if (plcbus_rx_status($handle, $homeunit, $action, @params_data))	# Did we receive a valid frame and does it contain a status message
 				{
-					my $test=sprintf ("%d", $params_data[4] & 0x1f);
-					next READ unless (defined($plcbus_hex_to_status{$test}));
-					$plcbus_status = $plcbus_hex_to_status{$test};
-					$plcbus_status = $plcbus_status . "\," . $params_data[5] . "\," . $params_data[6];
-					last READ;
+					$plcbus_status = plcbus_output_message ($handle, @params_data);
+					last READ if $plcbus_status;
 				}
 			}
 		}
 		alarm 0;
-		1;
 	} or return 0;
 
 	return $plcbus_status;
@@ -349,11 +352,11 @@ sub plcbus_rx_status
 {
 	my ($handle, $homeunit, $action, @data) = @_;
 	my $status = sprintf ("%d", $data[4] & 0x1F);
-	$action = $action & 0x1F;
+	$action = $action & 0x1F unless !(defined($action));
 
 	# if response is a direct response to the command issued
 	#
-	if ($homeunit == $data[3]) {
+	if ((defined($homeunit)) && ($homeunit == $data[3])) {
 
 		# if using three phase, wait for status report from coupler
 		#
@@ -388,13 +391,34 @@ sub plcbus_rx_status
 		elsif ($data[7] == 0x20) {
 			return 1; };
 	}
-	elsif (($data[4] == 0x0D) || ($data[4] == 0x0E)) { 
+	elsif (($status == 0x0D) || ($status == 0x0E) || ((defined($homeunit)) && ($homeunit != $data[3]))) { 
 		syswrite ($handle, "Detected traffic initiated by seperate transmitter\n") if $verbose; 
 		# TODO: decipher and send report regarding detected traffic
+		plcbus_output_message ($handle, @data);
 		return 0;
+	}
+	elsif (!defined $homeunit) {
+		syswrite ($handle, "Detected traffic initiated by seperate transmitter\n") if $verbose;
+		return 1;
 	}
 	else {
 		return 0; }
+}
+
+# Output the Received PLCBUS packet
+#
+sub plcbus_output_message 
+{
+	my ($handle, @data) = @_;
+	my $test = sprintf ("%d", $data[4] & 0x1f);
+	return 0 unless (defined($plcbus_hex_to_status{$test}));
+	$plcbus_status = $plcbus_hex_to_status{$test};
+	my $home = int($data[3] / 16) + 65;
+	$home = pack ("C", $home);
+	my $unit = $data[3] % 16 + 1;
+	$plcbus_status = $home.$unit . ',' . $plcbus_status . ',' . $data[5] . ',' . $data[6];
+	syswrite ($handle, "$plcbus_status\n");
+	return $plcbus_status;
 }
 
 
@@ -467,12 +491,13 @@ while(my @ready = $select->can_read())
                         next;
                 };
 
+		my $result;
                 $line =~ s/[\n\r\f]+$//ms;
 		if ($line eq '')
 		{
-			my $result = plcbus_check_status($handle);
-			$result = 'No loafing messages' if ($result == 0);
-			syswrite($handle, "$result\n") if $verbose;
+			do {
+				$result = plcbus_check_status($handle);
+			} while $result;
 			next;
 		};
 
@@ -486,10 +511,7 @@ while(my @ready = $select->can_read())
 		my $plcbus_result = plcbus_tx_command ($handle, $line);
 
 		# If illegal command or illegal reply received
-		syswrite($handle, "Command FAIL\n") unless $plcbus_result;
-
-		# Send the caller a status report
-		syswrite($handle, "$plcbus_result\n") if $plcbus_result;
+#		syswrite($handle, "Command FAIL\n") unless $plcbus_result;
 
         };
 };
