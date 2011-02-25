@@ -160,8 +160,8 @@ sub info
 	print	"		reserved for a scene it will still work.  Using a scene with a non-scene\n";
 	print	"		address will produce error messages but will work anyway.\n";
 	print	"	Note2:  HomeUnit P16 appears to be a 'All Units' or 'All Lights' address.\n\n";
-	print	"Example Command: A14,PRESET_DIM,100,5 (change dim value to 100% over 5 seconds)\n";
-	print	"Example Response: PRESET_DIM,100,5 (confirms command executed by PLCBUS module)\n\n";
+	print	"Example Command: A9,PRESET_DIM,100,5 (change dim value to 100% over 5 seconds)\n";
+	print	"Example Response: A9,PRESET_DIM,100,5 (confirms command executed by PLCBUS module)\n\n";
 	print	"Suggested command line interaction for above example:\n";
 	print	"	echo -e 'a14,preset_dim,100,5\\nEXIT\\n' | nc localhost 5151\n";
 	print	"If sending commands across a slow network you may need to increase the\n";
