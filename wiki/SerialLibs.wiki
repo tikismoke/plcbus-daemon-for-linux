@@ -1,0 +1,10 @@
+#summary One-sentence summary of this page.
+
+= Introduction =
+
+Perl module originally written by Ron Frazer.
+
+
+= Details =
+
+Visit Ron's scripts page [http://www.ronfrazier.net/mythtv/0.22/index.html here] for details.
