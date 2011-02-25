@@ -18,9 +18,11 @@ Please note, the biggest part of this Wiki page is copy-pasted from http://www.d
 = Usage =
   * Interact with the controller from any network connect pc using netcat in the following manner:
   
-  {{{nc localhost 5151}}}  Change localhost and 5151 to the appropriate hostname (or IP address) and port accordingly.
+  {{{nc localhost 5151}}}
+  Change localhost and 5151 to the appropriate hostname (or IP address) and port accordingly.
+  Note that for some Linux installation, 'nc' has to replaced with 'netcat'.  To exit the session, simply type 
   
-  Note that for some Linux installation, 'nc' has to replaced with 'netcat'.  To exit the session, simply type {{{exit}}}
+  {{{exit}}}
   
   Commands can be issued to the 1141 in the following format:
 
@@ -38,7 +40,7 @@ Please note, the biggest part of this Wiki page is copy-pasted from http://www.d
 
   {{{A1,PRESET_DIM,64,5}}}
 
-  ...which tells you that the dim level is 64% and the execution time was 5 seconds.
+  ...which tells you that the dim level is 64% and the fade time was 5 seconds.
   
   Commands can be sent from scripts easily by piping the output of echo to netcat.  For the above example:
   
