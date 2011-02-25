@@ -2,33 +2,48 @@ Please note, the biggest part of this Wiki page is copy-pasted from http://www.d
 
 = Requirements =
   # Installed Linux distribution (other platforms may also be supported, or not, your mileage may vary).
-  # The plcbus deamon server, it will be hosted on Google Code in the near future, but for now it can be downloaded [http://dl.dropbox.com/u/11711990/Serial/plcbus.pl here]
-  # Required Module originally written by Ron Frazer: [http://code.google.com/p/plcbus-daemon-for-linux/downloads/detail?name=IOSelectBuffered.pm#makechanges IOSelectBurrered.pm] or [http://dl.dropbox.com/u/11711990/Serial/IOSelectBuffered.pm mirror]
+  # The plcbus deamon server.
+  # IOSelectBuffered.pm - Perl Module originally written by Ron Frazer.
+  # PLCBUS-1141 or PLCBUS-1141+ PLCBUS Computer Interface (USB or RS-232).
 
 = Installation =
+  # Download the latest tarball from [http://plcbus-daemon-for-linux.googlecode.com/files/plcbus.pl here] and extract the files.
   # Save plcbus.pl into an executable directory (I use /usr/local/bin) and make it executable.
-  # Modify $serdev on line 11 of plcbus.pl to match your system (i.e. /dev/ttyUSB0). I use a custom udev rule to ensure my device is always /dev/plcbus.
   # Save IOSelectBurrered.pm into a directory called SerialLibs (note the use of uppercase letters) in one of the standard perl module locations (I use /etc/perl/SerialLibs).
-  # Run the server in the background:
-  {{{plcbus.pl &}}}
+  # Run the server help page to see the default settings and available options:
+  {{{plcbus.pl --help}}}
+  # Run the server in the background with the appropriate settings if required:
+  {{{plcbus.pl --device=/dev/ttyUSB0 &}}}
 
 = Usage =
-  * Send commands from any network connect pc using netcat in the following format:
+  * Interact with the controller from any network connect pc using netcat in the following manner:
+  
+  {{{nc localhost 5151}}}  Change localhost and 5151 to the appropriate hostname (or IP address) and port accordingly.
+  
+  Note that for some Linux installation, 'nc' has to replaced with 'netcat'.  To exit the session, simply type {{{exit}}}
+  
+  Commands can be issued to the 1141 in the following format:
 
-  {{{echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 localhost 5151}}}
+  {{{a1,preset_dim,64,5}}}
 
   where:
   * _a1_ can be replaced with the appropriate plcbus device
-  *_preset_dim can be replaced with the appropriate command or query (see lines 18 to 46 of plcbus.pl for a complete list)
-  * _64_ can be replaced with an appropriate value (in hex) for the command (ignored if not relevant)
-  * _5_ can be replaced with an appropriate value (in hex) for the command (ignored if not relevant)
-  * _localhost_ can be replaced by the appropriate hostname or ip address that the server resides upon
-  * _-i 1_ is only required if you are sending commands from a remote computer and don't seem to be getting a response
+  *_preset_dim can be replaced with the appropriate command or query (see the output of {{{plcbus.pl --info}}} for a complete list)
+  * _64_ can be replaced with a decimal value from 0 to 100 for the command (ignored if not relevant)
+  * _5_ can be replaced with a decimal value from 0 to 100 for the command (ignored if not relevant)
 
   Note that for some Linux installation, 'nc' has to replaced with 'netcat'
 
-  The example code above turns device a1 (a dimmable light module) on to full brightness (hex 64 = 100) over a period of 5 seconds. The response given is:
+  The example code above turns device a1 (a dimmable light module) on to 64% brightness over a period of 5 seconds. The response given is:
 
-  {{{PRESET_DIM,100,5}}}
+  {{{A1,PRESET_DIM,64,5}}}
 
-  ...which tells you that the dim level is 100% and the execution time was 5 seconds.
+  ...which tells you that the dim level is 64% and the execution time was 5 seconds.
+  
+  Commands can be sent from scripts easily by piping the output of echo to netcat.  For the above example:
+  
+  {{{echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc localhost 5151}}}
+  
+  ...would achieve the same result.  If you are using a slow connection use the -i netcat option to increase the interval:
+  
+  {{{echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 othernetworkhost 5151}}}
