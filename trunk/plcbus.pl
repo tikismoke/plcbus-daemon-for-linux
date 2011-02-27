@@ -190,6 +190,11 @@ sub info
 	print	"-	homeunit,GET_NOISE_STRENGTH\n";
 	print	"-	homeunit,GET_ALL_ID_PULSE\n";
 	print	"-	homeunit,GET_ON_ID_PULSE\n\n";
+	print   "plcbus.pl is also aware of commands sent by other transmitters (i.e. PLCBUS-2269\n";
+	print   "Scene Controller) and will display any and all messages that are not a result of\n";
+	print   "activity from the local 1141.  Any messgages will be stored and displayed the\n";
+	print   "next time a command is sent.  You can also check for any stored messages by\n";
+	print   "sending a blank command (i.e. a newline).\n\n";
 
 	return;
 }
@@ -275,7 +280,7 @@ sub plcbus_tx_command
 		$result = plcbus_check_status($handle, $plcbus_homeunit, $plcbus_command);
 		last unless (!$result);
 	}
-	syswrite ($handle, "ERROR, no repsonse\n") if ($verbose && !$result);
+	syswrite ($handle, "ERROR, no repsonse\n") if !$result;
 	return $result;
 }
 
