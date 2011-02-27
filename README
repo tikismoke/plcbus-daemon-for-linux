@@ -47,3 +47,5 @@ If you wish to send commands in a single-shot method (i.e. from a script) try
 the following:
 	echo -e 'a1,preset_dim,50,2\nexit\n' | nc localhost 5151
 replacing the command, data values, hostname and port as necessary.
+
+plcbus.pl is also aware of commands sent by other transmitters (i.e. PLCBUS-2269 Scene Controller) and will display any and all messages that are not a result of activity from the local 1141.  Any messgages will be stored and displayed the next time a command is sent.  You can also check for any stored messages by sending a blank command (i.e. a newline).
