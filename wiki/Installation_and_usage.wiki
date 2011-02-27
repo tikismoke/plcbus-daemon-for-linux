@@ -46,3 +46,7 @@
   ...would achieve the same result.  If you are using a slow remote connection use netcats -i  option to increase the interval:
   
   {{{echo -e 'a1,preset_dim,64,5\nEXIT\n' | nc -i 1 othernetworkhost 5151}}}
+  
+  plcbus.pl is also aware of commands sent by other transmitters (i.e. PLCBUS-2269 Scene Controller) and will display any and all messages
+  that are not a result of activity from the local 1141.  Any messgages will be stored and displayed the next time a command is sent.  You
+  can also check for any stored messages by sending a blank command (i.e. a newline).
