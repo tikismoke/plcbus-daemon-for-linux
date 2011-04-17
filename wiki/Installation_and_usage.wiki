@@ -2,6 +2,7 @@
   # Installed Linux distribution (other platforms may also be supported, or not, your mileage may vary).
   # The plcbus deamon server.
   # IOSelectBuffered.pm - Perl Module originally written by Ron Frazer.
+  # Device::SerialPort - emulation of Win32::SerialPort for Linux/POSIX (libdevice-serialport-perl package with Debian/*buntu distros).
   # PLCBUS-1141 or PLCBUS-1141+ PLCBUS Computer Interface (USB or RS-232).
 
 = Installation =
