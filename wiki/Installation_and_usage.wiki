@@ -51,3 +51,9 @@
   plcbus.pl is also aware of commands sent by other transmitters (i.e. PLCBUS-2269 Scene Controller) and will display any and all messages
   that are not a result of activity from the local 1141.  Any messgages will be stored and displayed the next time a command is sent.  You
   can also check for any stored messages by sending a blank command (i.e. a newline).
+
+== Examples ==
+
+To turn all lights off:
+
+* {{{echo -e 'a,all_lights_off,0,0\nEXIT\n' | netcat -i 1 localhost 5151}}}
