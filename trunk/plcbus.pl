@@ -472,7 +472,7 @@ die ("Could not create socket: $!") unless $listensocket;
 
 my $select = new SerialLibs::IOSelectBuffered($listensocket);
 
-while(my @ready = $select->can_read())
+LOOP : while(my @ready = $select->can_read())
 {
         return unless scalar(@ready);
         foreach my $handle (@ready)
@@ -513,10 +513,18 @@ while(my @ready = $select->can_read())
                         next;
                 };
 
-		my $plcbus_result = plcbus_tx_command ($handle, $line);
+		if ($line =~ /KILL/i)
+		{
+			my $dead = $serport->close();
+			die ("could not close serial port, aborted") unless $dead;
+			syswrite($handle, "SERIAL PORT CLOSED\n");
+			syswrite($handle, "CLOSING DOWN SERIALSERVER, GOODBYE\n");
+			$select->remove($handle);
+			$handle->close();
+			last LOOP;
+		};
 
-		# If illegal command or illegal reply received
-#		syswrite($handle, "Command FAIL\n") unless $plcbus_result;
+		my $plcbus_result = plcbus_tx_command ($handle, $line);
 
         };
 };
