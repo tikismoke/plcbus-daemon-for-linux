@@ -8,7 +8,7 @@
 = Installation =
   # Download the latest tarball from [http://plcbus-daemon-for-linux.googlecode.com/files/plcbus-1.01.tar.bz2 here] and extract the files.
   # Save plcbus.pl into an executable directory (I use /usr/local/bin) and make it executable.
-  # Save IOSelectBurrered.pm into a directory called SerialLibs (note the use of uppercase letters) in one of the standard perl module locations (I use /etc/perl/SerialLibs).
+  # Save IOSelectBurrered.pm into a directory called SerialLibs (note the use of uppercase letters) in one of the standard perl module locations (I use /usr/lib/perl5/site_perl/5.12.3/SerialLibs).
   # Run the server help page to see the default settings and available options:
   {{{plcbus.pl --help}}}
   # Run the server in the background with the appropriate settings if required:
